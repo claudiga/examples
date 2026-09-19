@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -65,14 +65,19 @@
 </head>
 <body>
 <main>
-  <h1>Togo &mdash; l'actu du jour</h1>
-  <p class="sub">Les 5 derniers titres sur le Togo.</p>
-  <button id="go">Voir les news</button>
+  <h1>Togo &mdash; Today's News</h1>
+  <p class="sub">The 5 latest headlines from Togo.</p>
+  <button id="go">Get the news</button>
   <p id="status"></p>
   <ol id="list"></ol>
 </main>
 <script>
-  const FEED = "https://news.google.com/rss/search?q=Togo+when:1d&hl=fr&gl=TG&ceid=TG:fr";
+  // English-language coverage of Togo is thinner than French, so widen the
+  // window if a single day doesn't turn up five stories.
+  const FEEDS = [
+    "https://news.google.com/rss/search?q=Togo+when:1d&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=Togo+when:7d&hl=en-US&gl=US&ceid=US:en"
+  ];
   // Browsers block cross-origin reads of the feed, so go through a CORS relay.
   const RELAYS = [
     u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
@@ -86,11 +91,11 @@
 
   function ago(date) {
     const mins = Math.round((Date.now() - date.getTime()) / 60000);
-    if (!isFinite(mins) || mins < 1) return "à l'instant";
-    if (mins < 60) return "il y a " + mins + " min";
+    if (!isFinite(mins) || mins < 1) return "just now";
+    if (mins < 60) return mins + "m ago";
     const hrs = Math.round(mins / 60);
-    if (hrs < 24) return "il y a " + hrs + " h";
-    return "il y a " + Math.round(hrs / 24) + " j";
+    if (hrs < 24) return hrs + "h ago";
+    return Math.round(hrs / 24) + "d ago";
   }
 
   function render(items) {
@@ -119,25 +124,36 @@
     });
   }
 
-  async function load() {
-    btn.disabled = true;
-    status.textContent = "Chargement…";
-    list.innerHTML = "";
+  async function fetchFeed(url) {
     for (const relay of RELAYS) {
       try {
-        const res = await fetch(relay(FEED), { cache: "no-store" });
+        const res = await fetch(relay(url), { cache: "no-store" });
         if (!res.ok) continue;
         const xml = new DOMParser().parseFromString(await res.text(), "text/xml");
         const items = [...xml.querySelectorAll("item")];
-        if (!items.length) continue;
-        render(items);
-        status.textContent = "Mis à jour " + new Date().toLocaleTimeString("fr-FR");
-        btn.disabled = false;
-        btn.textContent = "Rafraîchir";
-        return;
-      } catch (e) { /* essaie le relais suivant */ }
+        if (items.length) return items;
+      } catch (e) { /* try the next relay */ }
     }
-    status.textContent = "Impossible de charger les news. Réessaie dans un instant.";
+    return [];
+  }
+
+  async function load() {
+    btn.disabled = true;
+    status.textContent = "Loading\u2026";
+    list.innerHTML = "";
+    let items = [];
+    for (const feed of FEEDS) {
+      const found = await fetchFeed(feed);
+      if (found.length > items.length) items = found;
+      if (items.length >= 5) break;
+    }
+    if (items.length) {
+      render(items);
+      status.textContent = "Updated " + new Date().toLocaleTimeString("en-US");
+      btn.textContent = "Refresh";
+    } else {
+      status.textContent = "Couldn't load the news. Try again in a moment.";
+    }
     btn.disabled = false;
   }
 
